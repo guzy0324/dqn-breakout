@@ -82,15 +82,13 @@ class Agent(object):
         values = self.__policy(state_batch.float()).gather(1, action_batch)
         values_next = self.__target(next_batch.float()).max(1).values.detach()
         expected = (self.__gamma * values_next.unsqueeze(1)) * \
-            (1. - done_batch) + reward_batch
+            (1. - done_batch) + reward_batch  # 如果done则是r，否则是r + gamma * max Q
         loss = F.smooth_l1_loss(values, expected)  # smooth l1损失
 
         self.__optimizer.zero_grad()  # 将模型的参数梯度初始化为0
-        print(loss)
-        loss.backward()  # 计算梯度
-        print(loss)
+        loss.backward()  # 计算梯度，存到__policy.parameters.grad()中
         for param in self.__policy.parameters():
-            param.grad.data.clamp_(-1, 1)  # 固定所有参数为[-1, 1]
+            param.grad.data.clamp_(-1, 1)  # 固定所有梯度为[-1, 1]
         self.__optimizer.step()  # 做一步最优化
 
         return loss.item()
