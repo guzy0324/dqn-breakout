@@ -34,15 +34,15 @@ class MyEnv(object):
 
     def __init__(self, device: TorchDevice) -> None:
         env_raw = make_atari("BreakoutNoFrameskip-v4")
-        self.__env_train = wrap_deepmind(env_raw, episode_life=True)
+        self.__env_train = wrap_deepmind(env_raw, episode_life=True)  # 创建训练环境
         env_raw = make_atari("BreakoutNoFrameskip-v4")
-        self.__env_eval = wrap_deepmind(env_raw, episode_life=True)
+        self.__env_eval = wrap_deepmind(env_raw, episode_life=True)  # 创建测试环境
         self.__env = self.__env_train
         self.__device = device
 
     def reset(
             self,
-            render: bool = False,
+            render: bool = False,  # 是否渲染
     ) -> Tuple[List[TensorObs], float, List[GymImg]]:
         """reset resets and initializes the underlying gym environment."""
         self.__env.reset()
@@ -50,13 +50,13 @@ class MyEnv(object):
         observations = []
         frames = []
         for _ in range(5): # no-op
-            obs, reward, done = self.step(0)
+            obs, reward, done = self.step(0)  # 运行一步
             observations.append(obs)
             init_reward += reward
             if done:
                 return self.reset(render)
             if render:
-                frames.append(self.get_frame())
+                frames.append(self.get_frame())  # 如果渲染，获得一帧
 
         return observations, init_reward, frames
 

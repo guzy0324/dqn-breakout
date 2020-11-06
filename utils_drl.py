@@ -45,8 +45,8 @@ class Agent(object):
         self.__r.seed(seed)
 
         # 将所有最开始读取数据时的tensor变量copy一份到device所指定的GPU上去，之后的运算都在GPU上进行
-        self.__policy = DQN(action_dim, device).to(device)
-        self.__target = DQN(action_dim, device).to(device)
+        self.__policy = DQN(action_dim, device).to(device)  # policy network
+        self.__target = DQN(action_dim, device).to(device)  # target network
         if restore is None:
             self.__policy.apply(DQN.init_weights)  # policy自定义参数初始化方式
         else:
