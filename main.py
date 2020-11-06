@@ -31,10 +31,7 @@ EVALUATE_FREQ = 100_000
 rand = random.Random()
 rand.seed(GLOBAL_SEED)
 new_seed = lambda: rand.randint(0, 1000_000)
-try:
-    os.mkdir(SAVE_PREFIX)
-except:
-    pass
+os.mkdir(SAVE_PREFIX)
 
 torch.manual_seed(new_seed())
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
