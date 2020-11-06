@@ -64,8 +64,8 @@ for step in progressive:
 
     training = len(memory) > WARM_STEPS
     state = env.make_state(obs_queue).to(device).float()  # 将长度5的观察队列做成state（只用到了后4个obs
-    action = agent.run(state, training)
-    obs, reward, done = env.step(action)
+    action = agent.run(state, training)  # 根据policy network获得当前action
+    obs, reward, done = env.step(action)  # 运行一步
     obs_queue.append(obs)  # 将头pop，队列中剩后4个加1个新的
     memory.push(env.make_folded_state(obs_queue), action, reward, done)  # folded_state：[:4]是state，[1:]是next_state
 
