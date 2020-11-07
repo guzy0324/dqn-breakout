@@ -75,7 +75,7 @@ for step in progressive:
     if step % EVALUATE_FREQ == 0:  # 每过EVALUATE_FREQ，就评价一次
         avg_reward, frames = env.evaluate(obs_queue, agent, render=RENDER)
         with open("rewards.txt", "a") as fp:
-            fp.write(f"{step//EVALUATE_FREQ:3d} {step:8d} {avg_reward:.1f}\n")
+            fp.write(f"{step//EVALUATE_FREQ:3d} {step:8d} {avg_reward:.1f}\n")  # 可以从rewards.txt中画出学习曲线
         if RENDER:  # 如果RENDER，就绘图
             prefix = f"eval_{step//EVALUATE_FREQ:03d}"
             os.mkdir(prefix)

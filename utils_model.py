@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class DQN(nn.Module):
+class DQN(nn.Module):  # 可以修改网络结构 为duel dqn
 
     def __init__(self, action_dim, device):
         super(DQN, self).__init__()
@@ -14,13 +14,13 @@ class DQN(nn.Module):
         self.__fc2 = nn.Linear(512, action_dim)
         self.__device = device
 
-    def forward(self, x):
+    def forward(self, x):  # 输入状态x（由连续多个frame构成的stack）
         x = x / 255.
         x = F.relu(self.__conv1(x))
         x = F.relu(self.__conv2(x))
         x = F.relu(self.__conv3(x))
         x = F.relu(self.__fc1(x.view(x.size(0), -1)))
-        return self.__fc2(x)
+        return self.__fc2(x)  # 返回一个长度为action_dim的tensor，表示状态x下每个可选动作的value 即Q(x,a) 网络参数化的对象
 
     @staticmethod
     def init_weights(module):
