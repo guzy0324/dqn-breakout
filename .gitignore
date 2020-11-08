@@ -5,4 +5,4 @@ eval_*/
 models/
 saved_models/
 rewards*.txt
-.idea*/
+.idea

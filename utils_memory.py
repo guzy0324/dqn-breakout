@@ -32,10 +32,10 @@ class Experience(object):
 
         self.__device = conf['device']
         self.__m_states = torch.zeros(
-            (self.size, conf['channels'], 84, 84), dtype=torch.uint8)
-        self.__m_actions = torch.zeros((self.size, 1), dtype=torch.long)
-        self.__m_rewards = torch.zeros((self.size, 1), dtype=torch.int8)
-        self.__m_dones = torch.zeros((self.size, 1), dtype=torch.bool)
+            (self.size+1, conf['channels'], 84, 84), dtype=torch.uint8)
+        self.__m_actions = torch.zeros((self.size+1, 1), dtype=torch.long)
+        self.__m_rewards = torch.zeros((self.size+1, 1), dtype=torch.int8)
+        self.__m_dones = torch.zeros((self.size+1, 1), dtype=torch.bool)
 
         self.priority_queue = utils_prior.BinaryHeap(self.priority_size)
         self.distributions = self.build_distributions()
@@ -182,3 +182,4 @@ class Experience(object):
 
     def __len__(self):
         return self.record_size
+
