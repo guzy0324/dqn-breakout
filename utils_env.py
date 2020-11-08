@@ -49,7 +49,7 @@ class MyEnv(object):
         init_reward = 0.
         observations = []
         frames = []
-        for _ in range(5): # no-op
+        for _ in range(5):  # no-op
             obs, reward, done = self.step(0)  # 运行一步
             observations.append(obs)
             init_reward += reward

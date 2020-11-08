@@ -182,4 +182,3 @@ class Experience(object):
 
     def __len__(self):
         return self.record_size
-

@@ -16,8 +16,6 @@ from utils_types import (
 from utils_memory import Experience
 from utils_model import DQN
 
-import pdb
-
 
 class Agent(object):
 
@@ -84,12 +82,11 @@ class Agent(object):
         values = self.__policy(state_batch.float()).gather(1, action_batch)
         # values_next = self.__target(next_batch.float()).max(1).values.detach()  # 这里还是nature dqn 没有用ddqn 虽都是双网络
         values_next = self.__target(next_batch.float()).gather(
-                        1, self.__policy(next_batch.float()).max(1).indices.unsqueeze(1)).detach()  # 改成dqn
+            1, self.__policy(next_batch.float()).max(1).indices.unsqueeze(1)).detach()  # 改成dqn
         expected = (self.__gamma * values_next) * \
                    (1. - done_batch) + reward_batch  # 如果done则是r（考虑t时刻done，没有t+1时刻），否则是r + gamma * max Q
 
         td_error = (expected - values).detach()
-        pdb.set_trace()
         memory.update_priority(rank_e_id, td_error.cpu().numpy())
 
         values = values.mul(w)

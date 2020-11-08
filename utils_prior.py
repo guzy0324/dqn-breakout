@@ -66,7 +66,7 @@ class BinaryHeap(object):
         :return: bool
         """
         self.size += 1
-        
+
         if self.check_full() and not self.replace:
             sys.stderr.write('Error: no space left to add experience id %d with priority value %f\n' % (e_id, priority))
             return False
