@@ -13,7 +13,7 @@ from utils_types import (
     TorchDevice,
 )
 
-from utils_memory import ReplayMemory
+from utils_memory import Experience
 from utils_model import DQN
 
 
@@ -74,16 +74,22 @@ class Agent(object):
                 return self.__policy(state).max(1).indices.item()
         return self.__r.randint(0, self.__action_dim - 1)
 
-    def learn(self, memory: ReplayMemory, batch_size: int) -> float:
+    def learn(self, memory: Experience, step: int) -> float:
         """learn trains the value network via TD-learning."""
-        state_batch, action_batch, reward_batch, next_batch, done_batch = \
-            memory.sample(batch_size)  # 随机取样
+        state_batch, action_batch, reward_batch, next_batch, done_batch, w, rank_e_id = \
+            memory.sample(step)  # 随机取样 state是5帧的前4帧 next是5帧的后4帧
 
         values = self.__policy(state_batch.float()).gather(1, action_batch)
         values_next = self.__target(next_batch.float()).max(1).values.detach()  # 这里还是nature dqn 没有用ddqn 虽都是双网络
 
         expected = (self.__gamma * values_next.unsqueeze(1)) * \
             (1. - done_batch) + reward_batch  # 如果done则是r（考虑t时刻done，没有t+1时刻），否则是r + gamma * max Q
+
+        td_error = (expected - values).detach()
+        memory.update_priority(rank_e_id, td_error.cpu().numpy())
+
+        values = values.mul(w)
+        expected = expected.mul(w)
         loss = F.smooth_l1_loss(values, expected)  # smooth l1损失
 
         self.__optimizer.zero_grad()  # 将模型的参数梯度初始化为0

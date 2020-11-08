@@ -7,8 +7,7 @@ import torch
 
 from utils_drl import Agent
 from utils_env import MyEnv
-from utils_memory import ReplayMemory
-
+from utils_memory import Experience
 
 GAMMA = 0.99
 GLOBAL_SEED = 0
@@ -45,7 +44,15 @@ agent = Agent(
     EPS_END,
     EPS_DECAY,
 )
-memory = ReplayMemory(STACK_SIZE + 1, MEM_SIZE, device)
+# memory = ReplayMemory(STACK_SIZE + 1, MEM_SIZE, device)
+memory = Experience(
+    {'size': MEM_SIZE,
+     'batch_size': BATCH_SIZE,
+     'learn_start': WARM_STEPS,
+     'steps': MAX_STEPS,
+     'device': device,
+     'channels': STACK_SIZE + 1}
+)
 
 #### Training ####
 obs_queue: deque = deque(maxlen=5)  # 当新元素入队且队满时，会pop掉头
@@ -64,10 +71,11 @@ for step in progressive:
     action = agent.run(state, training)  # 根据policy network获得当前action
     obs, reward, done = env.step(action)  # 运行一步
     obs_queue.append(obs)  # 将头pop，队列中剩后4个加1个新的
-    memory.push(env.make_folded_state(obs_queue), action, reward, done)  # folded_state：[:4]是state，[1:]是next_state
+
+    memory.store(env.make_folded_state(obs_queue), action, reward, done)  # folded_state：[:4]是state，[1:]是next_state
 
     if step % POLICY_UPDATE == 0 and training:  # 如果training，每过POLICY_UPDATE，就更新一次policy network
-        agent.learn(memory, BATCH_SIZE)
+        agent.learn(memory, step)
 
     if step % TARGET_UPDATE == 0:  # 每过TARGET_UPDATE，就更新一次target network
         agent.sync()
@@ -75,13 +83,13 @@ for step in progressive:
     if step % EVALUATE_FREQ == 0:  # 每过EVALUATE_FREQ，就评价一次
         avg_reward, frames = env.evaluate(obs_queue, agent, render=RENDER)
         with open("rewards.txt", "a") as fp:
-            fp.write(f"{step//EVALUATE_FREQ:3d} {step:8d} {avg_reward:.1f}\n")  # 可以从rewards.txt中画出学习曲线
+            fp.write(f"{step // EVALUATE_FREQ:3d} {step:8d} {avg_reward:.1f}\n")  # 可以从rewards.txt中画出学习曲线
         if RENDER:  # 如果RENDER，就绘图
-            prefix = f"eval_{step//EVALUATE_FREQ:03d}"
+            prefix = f"eval_{step // EVALUATE_FREQ:03d}"
             os.mkdir(prefix)
             for ind, frame in enumerate(frames):
                 with open(os.path.join(prefix, f"{ind:06d}.png"), "wb") as fp:
                     frame.save(fp, format="png")
         agent.save(os.path.join(
-            SAVE_PREFIX, f"model_{step//EVALUATE_FREQ:03d}"))
+            SAVE_PREFIX, f"model_{step // EVALUATE_FREQ:03d}"))
         done = True

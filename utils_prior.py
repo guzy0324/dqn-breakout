@@ -7,7 +7,7 @@
 import sys
 import math
 
-import utility
+import utils
 
 
 class BinaryHeap(object):
@@ -28,8 +28,8 @@ class BinaryHeap(object):
             self.max_size = None or self.size
 
             experience_list = list(map(lambda x: self.priority_queue[x], self.priority_queue))
-            self.p2e = utility.list_to_dict(experience_list)
-            self.e2p = utility.exchange_key_value(self.p2e)
+            self.p2e = utils.list_to_dict(experience_list)
+            self.e2p = utils.exchange_key_value(self.p2e)
             for i in range(int(self.size / 2), -1, -1):
                 self.down_heap(i)
 

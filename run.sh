@@ -10,7 +10,7 @@ fi
 rm -r eval_*
 
 if [ -z ${CUDA_VISIBLE_DEVICES} ]; then
-    export CUDA_VISIBLE_DEVICES="0"
+    export CUDA_VISIBLE_DEVICES="7"
 fi
 
 python main.py

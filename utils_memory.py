@@ -1,68 +1,185 @@
-from typing import (
-    Tuple,
-)
+#!/usr/bin/python
+# -*- encoding=utf-8 -*-
+# author: Ian
+# e-mail: stmayue@gmail.com
+# description:
 
+import sys
+import math
+import random
+import numpy as np
 import torch
 
-from utils_types import (
-    BatchAction,
-    BatchDone,
-    BatchNext,
-    BatchReward,
-    BatchState,
-    TensorStack5,
-    TorchDevice,
-)
+import utils_prior
 
 
-class ReplayMemory(object): #  PER需要在这里修改：push和sample
+class Experience(object):
 
-    def __init__(
-            self,
-            channels: int,
-            capacity: int,
-            device: TorchDevice,
-    ) -> None:
-        self.__device = device
-        self.__capacity = capacity
-        self.__size = 0
-        self.__pos = 0
+    def __init__(self, conf):
+        self.size = conf['size']
+        self.batch_size = conf['batch_size'] if 'batch_size' in conf else 32
+        self.learn_start = conf['learn_start'] if 'learn_start' in conf else 1000
+        self.total_steps = conf['steps'] if 'steps' in conf else 100000
 
+        self.priority_size = conf['priority_size'] if 'priority_size' in conf else self.size
+        self.alpha = conf['alpha'] if 'alpha' in conf else 0.7
+        self.beta_zero = conf['beta_zero'] if 'beta_zero' in conf else 0.5
+        # partition number N, split total size to N part
+        self.partition_num = conf['partition_num'] if 'partition_num' in conf else 100
+
+        self.index = 0
+        self.record_size = 0
+
+        self.__device = conf['device']
         self.__m_states = torch.zeros(
-            (capacity, channels, 84, 84), dtype=torch.uint8)
-        self.__m_actions = torch.zeros((capacity, 1), dtype=torch.long)
-        self.__m_rewards = torch.zeros((capacity, 1), dtype=torch.int8)
-        self.__m_dones = torch.zeros((capacity, 1), dtype=torch.bool)
+            (self.size, conf['channels'], 84, 84), dtype=torch.uint8)
+        self.__m_actions = torch.zeros((self.size, 1), dtype=torch.long)
+        self.__m_rewards = torch.zeros((self.size, 1), dtype=torch.int8)
+        self.__m_dones = torch.zeros((self.size, 1), dtype=torch.bool)
 
-    def push(
-            self,
-            folded_state: TensorStack5,
-            action: int,
-            reward: int,
-            done: bool,
-    ) -> None:
-        self.__m_states[self.__pos] = folded_state
-        self.__m_actions[self.__pos, 0] = action
-        self.__m_rewards[self.__pos, 0] = reward
-        self.__m_dones[self.__pos, 0] = done
+        self.priority_queue = utils_prior.BinaryHeap(self.priority_size)
+        self.distributions = self.build_distributions()
 
-        self.__pos = (self.__pos + 1) % self.__capacity
-        self.__size = max(self.__size, self.__pos)
+        self.beta_grad = (1 - self.beta_zero) / float(self.total_steps - self.learn_start)
 
-    def sample(self, batch_size: int) -> Tuple[
-            BatchState,
-            BatchAction,
-            BatchReward,
-            BatchNext,
-            BatchDone,
-    ]:
-        indices = torch.randint(0, high=self.__size, size=(batch_size,))
-        b_state = self.__m_states[indices, :4].to(self.__device).float()
-        b_next = self.__m_states[indices, 1:].to(self.__device).float()
-        b_action = self.__m_actions[indices].to(self.__device)
-        b_reward = self.__m_rewards[indices].to(self.__device).float()
-        b_done = self.__m_dones[indices].to(self.__device).float()
-        return b_state, b_action, b_reward, b_next, b_done
+    def build_distributions(self):
+        """
+        preprocess pow of rank
+        (rank i) ^ (-alpha) / sum ((rank i) ^ (-alpha))
+        :return: distributions, dict
+        """
+        res = {}
+        n_partitions = self.partition_num
+        partition_num = 1
+        # each part size
+        partition_size = int(math.floor(self.size / n_partitions))
 
-    def __len__(self) -> int:
-        return self.__size
+        for n in range(partition_size, self.size + 1, partition_size):
+            if self.learn_start <= n <= self.priority_size:
+                distribution = {}
+                # P(i) = (rank i) ^ (-alpha) / sum ((rank i) ^ (-alpha))
+                pdf = list(
+                    map(lambda x: math.pow(x, -self.alpha), range(1, n + 1))
+                )
+                pdf_sum = math.fsum(pdf)
+                distribution['pdf'] = list(map(lambda x: x / pdf_sum, pdf))
+                # split to k segment, and than uniform sample in each k
+                # set k = batch_size, each segment has total probability is 1 / batch_size
+                # strata_ends keep each segment start pos and end pos
+                cdf = np.cumsum(distribution['pdf'])
+                strata_ends = {1: 0, self.batch_size + 1: n}
+                step = 1 / float(self.batch_size)
+                index = 1
+                for s in range(2, self.batch_size + 1):
+                    while cdf[index] < step:
+                        index += 1
+                    strata_ends[s] = index
+                    step += 1 / float(self.batch_size)
+
+                distribution['strata_ends'] = strata_ends
+
+                res[partition_num] = distribution
+
+            partition_num += 1
+
+        return res
+
+    def fix_index(self):
+        """
+        get next insert index
+        :return: index, int
+        """
+        if self.record_size <= self.size:
+            self.record_size += 1
+        if self.index % self.size == 0:
+            self.index = 1
+            return self.index
+        else:
+            self.index += 1
+            return self.index
+
+    def store(self, folded_state, action, reward, done):
+        """
+        store experience, suggest that experience is a tuple of (s1, a, r, s2, t)
+        so each experience is valid
+        :param folded_state: tensor
+        :return: bool, indicate insert status
+        """
+        insert_index = self.fix_index()
+        if insert_index > 0:
+            self.__m_states[insert_index] = folded_state
+            self.__m_actions[insert_index, 0] = action
+            self.__m_rewards[insert_index, 0] = reward
+            self.__m_dones[insert_index, 0] = done
+
+            # add to priority queue
+            priority = self.priority_queue.get_max_priority()
+            self.priority_queue.update(priority, insert_index)
+            return True
+        else:
+            sys.stderr.write('Insert failed\n')
+            return False
+
+    def rebalance(self):
+        """
+        rebalance priority queue
+        :return: None
+        """
+        self.priority_queue.balance_tree()
+
+    def update_priority(self, indices, delta):
+        """
+        update priority according indices and deltas
+        :param indices: list of experience id
+        :param delta: list of delta, order correspond to indices
+        :return: None
+        """
+        for i in range(0, len(indices)):
+            self.priority_queue.update(math.fabs(delta[i]), indices[i])
+
+    def sample(self, global_step):
+        """
+        sample a mini batch from experience replay
+        :param global_step: now training step
+        :return: experience, list, samples
+        :return: w, list, weights
+        :return: rank_e_id, list, samples id, used for update priority
+        """
+        if self.record_size < self.learn_start:
+            sys.stderr.write('Record size less than learn start! Sample failed\n')
+            return False, False, False
+
+        dist_index = math.floor(self.record_size / self.size * self.partition_num)
+        # issue 1 by @camigord
+        partition_size = math.floor(self.size / self.partition_num)
+        partition_max = dist_index * partition_size
+        distribution = self.distributions[dist_index]
+        rank_list = []
+        # sample from k segments
+        for n in range(1, self.batch_size + 1):
+            index = random.randint(distribution['strata_ends'][n] + 1,
+                                   distribution['strata_ends'][n + 1])
+            rank_list.append(index)
+
+        # beta, increase by global_step, max 1
+        beta = min(self.beta_zero + (global_step - self.learn_start - 1) * self.beta_grad, 1)
+        # find all alpha pow, notice that pdf is a list, start from 0
+        alpha_pow = [distribution['pdf'][v - 1] for v in rank_list]
+        # w = (N * P(i)) ^ (-beta) / max w
+        w = np.power(np.array(alpha_pow) * partition_max, -beta)
+        w_max = max(w)
+        w = torch.tensor(np.divide(w, w_max)).to(self.__device).float()
+        # rank list is priority id
+        # convert to experience id
+        rank_e_id = self.priority_queue.priority_to_experience(rank_list)
+        # get experience id according rank_e_id
+        b_state = self.__m_states[rank_e_id, :4].to(self.__device).float()
+        b_next = self.__m_states[rank_e_id, 1:].to(self.__device).float()
+        b_action = self.__m_actions[rank_e_id].to(self.__device)
+        b_reward = self.__m_rewards[rank_e_id].to(self.__device).float()
+        b_done = self.__m_dones[rank_e_id].to(self.__device).float()
+        return b_state, b_action, b_reward, b_next, b_done, w, rank_e_id
+
+    def __len__(self):
+        return self.record_size
+
